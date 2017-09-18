@@ -90,7 +90,6 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 		info.eip_file, info.eip_line,
 		info.eip_fn_namelen, info.eip_fn_name,
 		eip-info.eip_fn_addr);
-//         kern/monitor.c:143: monitor+106
 	ebp = (uint32_t*) *ebp;
 	}
 	return 0;
