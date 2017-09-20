@@ -158,6 +158,8 @@ mem_init(void)
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
 
+	envs = (struct Env*) boot_alloc(NENV * sizeof(struct Env));
+	// memset(envs, 0, NENV *  sizeof(struct Env));
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
 	// up the list of free physical pages. Once we've done so, all further
@@ -181,7 +183,7 @@ mem_init(void)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
 
-	boot_map_region(kern_pgdir, UPAGES, npages * sizeof(struct PageInfo), PADDR(pages), PTE_U | PTE_P);
+	boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U | PTE_P);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map the 'envs' array read-only by the user at linear address UENVS
@@ -190,7 +192,7 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
-
+	boot_map_region(kern_pgdir, UENVS, PTSIZE, PADDR(envs), PTE_U | PTE_P);
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
 	// stack.  The kernel stack grows down from virtual address KSTACKTOP.
@@ -203,7 +205,7 @@ mem_init(void)
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
 
-	boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack),  PTE_W );
+	boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack),  PTE_W | PTE_P);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
@@ -213,7 +215,7 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
-	boot_map_region(kern_pgdir, KERNBASE, 0xffffffff- KERNBASE, 0, PTE_W | PTE_U);
+	boot_map_region(kern_pgdir, KERNBASE, 0xffffffff- KERNBASE, 0, PTE_W | PTE_P);
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
 
@@ -277,7 +279,7 @@ page_init(void)
 
 		//from the begining of the hole to the all alloced mem just now.
 		if(i == 0 || ((i >= PGNUM(IOPHYSMEM) &&
-				i <= PGNUM(end - KERNBASE + PGSIZE + npages * sizeof(struct PageInfo))))) {
+				i <= PGNUM(end - KERNBASE + PGSIZE + 2 * PTSIZE)))) {
             pages[i].pp_ref = 1;
             pages[i].pp_link = NULL;
             continue;
@@ -471,6 +473,7 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	}
 
 	*pte = page2pa(pp) | perm | PTE_P;
+	pgdir[PDX(va)] |= perm;
 	return 0;
 }
 
@@ -564,6 +567,19 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
+	pte_t* pte = NULL;
+
+	for(user_mem_check_addr = (uintptr_t)va; user_mem_check_addr < (uintptr_t)ROUNDUP(va + len, PGSIZE); 
+		user_mem_check_addr += PGSIZE){
+			
+			pte = pgdir_walk(env->env_pgdir, (void *)user_mem_check_addr, 0);
+			
+			// if (!pte || (*pte & perm) != perm) {
+			if(!pte || (user_mem_check_addr >= ULIM) || !(*pte & PTE_P) || ((*pte) & perm) != perm){
+				
+				return -E_FAULT;
+			}
+	}
 
 	return 0;
 }
